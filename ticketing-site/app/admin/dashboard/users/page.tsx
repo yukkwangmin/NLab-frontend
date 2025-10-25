@@ -1,5 +1,11 @@
-"use client";
+// app/admin/dashboard/users/page.tsx
 
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -8,59 +14,47 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
-// 가짜(mock) 사용자 데이터
-const mockUsers = [
-  { id: 'user001', name: '홍길동', email: 'hong@example.com', signUpDate: '2025-09-01', status: '활성' },
-  { id: 'user002', name: '이순신', email: 'lee@example.com', signUpDate: '2025-09-05', status: '활성' },
-  { id: 'user003', name: '유관순', email: 'ryu@example.com', signUpDate: '2025-09-10', status: '정지' },
-  { id: 'user004', name: '세종대왕', email: 'sejong@example.com', signUpDate: '2025-09-12', status: '활성' },
-];
+// 이 페이지는 서버 컴포넌트로 동작합니다.
+export default async function UsersPage() {
+  // 1. 관리자 클라이언트를 생성합니다.
+  const supabase = createSupabaseAdminClient();
 
-export default function UserManagementPage() {
+  // 2. 모든 사용자 목록을 가져옵니다.
+  const { data: { users }, error } = await supabase.auth.admin.listUsers();
+
+  if (error) {
+    return <p>사용자 목록을 불러오는 중 에러가 발생했습니다: {error.message}</p>;
+  }
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">계정 관리</h1>
-        <div className="w-1/3">
-          <Input placeholder="사용자 이름 또는 이메일로 검색..." />
-        </div>
-      </div>
-
-      <Card>
+    <Card>
+      <CardHeader>
+        <CardTitle>계정 관리</CardTitle>
+      </CardHeader>
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>이름</TableHead>
               <TableHead>이메일</TableHead>
-              <TableHead>가입일</TableHead>
-              <TableHead>상태</TableHead>
-              <TableHead className="text-right">관리</TableHead>
+              <TableHead>가입 일시</TableHead>
+              <TableHead>사용자 ID</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mockUsers.map((user) => (
+            {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
-                <TableCell>{user.signUpDate}</TableCell>
                 <TableCell>
-                  <Badge variant={user.status === '활성' ? 'default' : 'destructive'}>
-                    {user.status}
-                  </Badge>
+                  {new Date(user.created_at).toLocaleString('ko-KR')}
                 </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="outline" size="sm">상세 보기</Button>
-                </TableCell>
+                <TableCell className="font-mono text-xs">{user.id}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </Card>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -8,9 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
+import { supabase } from '@/lib/supabaseClient'; // Supabase 클라이언트 추가
 
-// --- [수정] ---
-// 1. 좌석 등급과 가격 정보를 명확하게 정의합니다.
+// --- 좌석 등급 및 가격 정의 ---
 type SeatGrade = '응원석' | '일반석';
 
 const PRICES: Record<SeatGrade, number> = {
@@ -18,13 +18,11 @@ const PRICES: Record<SeatGrade, number> = {
   '일반석': 65000,
 };
 
-// 2. 좌석 타입에 grade를 추가합니다.
 interface Seat {
   id: string;
   status: 'available' | 'taken';
   grade: SeatGrade;
 }
-// --- 여기까지 수정 ---
 
 interface BankAccount {
   bankName: string;
@@ -45,14 +43,10 @@ export default function LckMatchBookingPage() {
 
   // --- 좌석 데이터 생성 ---
   useEffect(() => {
-    // --- [수정] ---
-    // 3. 좌석 생성 시 등급을 할당합니다.
     const newSeats: Seat[] = [];
     const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
     rows.forEach((row, rowIndex) => {
-      // 앞쪽 4줄(A-D)을 응원석으로, 나머지를 일반석으로 가정
       const grade: SeatGrade = rowIndex < 4 ? '응원석' : '일반석';
-
       for (let i = 1; i <= 10; i++) {
         newSeats.push({
           id: `${row}${i}`,
@@ -63,28 +57,23 @@ export default function LckMatchBookingPage() {
     });
     setSeats(newSeats);
   }, []);
-  // --- 여기까지 수정 ---
 
   // --- 이벤트 핸들러 ---
-
   const handleAddToCart = () => {
     const cartItem = {
       id: "lck_summer_playoffs_2025",
       title: "2025 LCK Summer Playoffs R1",
-      price: PRICES['응원석'], // 대표 가격으로 응원석 가격을 사용
+      price: PRICES['응원석'],
       quantity: 1,
       poster: "/lck-poster-large.png",
     };
-
     const existingCart = JSON.parse(localStorage.getItem("shopping_cart") || "[]");
     const itemIndex = existingCart.findIndex((item: any) => item.id === cartItem.id);
-
     if (itemIndex > -1) {
       existingCart[itemIndex].quantity += 1;
     } else {
       existingCart.push(cartItem);
     }
-
     localStorage.setItem("shopping_cart", JSON.stringify(existingCart));
     alert("상품을 장바구니에 담았습니다.");
   };
@@ -128,32 +117,34 @@ export default function LckMatchBookingPage() {
     setIsPaymentModalOpen(true);
   };
   
-  const handleConfirmBooking = () => {
-    const newBooking = {
-      id: Date.now(),
-      title: "2025 LCK Summer Playoffs R1",
-      match: "T1 vs Gen.G",
-      date: "2025년 9월 20일 (토) 17:00",
-      seats: selectedSeats.map(s => `${s.id}(${s.grade})`).join(', '),
-      totalPrice: totalPrice,
-      paymentMethod: paymentMethod,
-      bankAccount: paymentMethod === 'bank_transfer' ? bankAccount : null,
-      poster: "/lck-poster-large.png",
+  // --- [수정된 부분] ---
+  const handleConfirmBooking = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+    
+    const newOrder = {
+      user_id: user.id,
+      ticket_id: 3, // 'LCK 플레이오프'가 tickets 테이블의 3번이라고 가정
+      quantity: selectedSeats.length,
+      total_price: totalPrice,
+      status: 'confirmed'
     };
 
-    const existingBookings = JSON.parse(localStorage.getItem("my_bookings") || "[]");
-    existingBookings.push(newBooking);
-    localStorage.setItem("my_bookings", JSON.stringify(existingBookings));
+    const { error } = await supabase.from('orders').insert(newOrder);
 
-    let confirmationMessage = `${selectedSeats.map(s => s.id).join(', ')}석 예매가 완료되었습니다!`;
-    if (newBooking.bankAccount) {
-      confirmationMessage += `\n\n입금 계좌: ${newBooking.bankAccount.bankName} ${newBooking.bankAccount.accountNumber}\n입금 기한: ${newBooking.bankAccount.expires} 까지`;
+    if (error) {
+      alert(`예매에 실패했습니다: ${error.message}`);
+    } else {
+      alert('예매가 성공적으로 완료되었습니다!');
+      setIsPaymentModalOpen(false);
+      setSelectedSeats([]);
     }
-    alert(confirmationMessage);
-
-    setIsPaymentModalOpen(false);
-    setSelectedSeats([]);
   };
+  // --- [여기까지 수정] ---
   
   const handleCloseModals = () => {
     setIsSeatModalOpen(false);
@@ -161,10 +152,7 @@ export default function LckMatchBookingPage() {
     setSelectedSeats([]);
   }
 
-  // --- [수정] ---
-  // 4. 선택된 좌석들의 등급에 맞춰 총 금액을 동적으로 계산합니다.
   const totalPrice = selectedSeats.reduce((sum, seat) => sum + PRICES[seat.grade], 0);
-  // --- 여기까지 수정 ---
 
   return (
     <>
@@ -189,12 +177,12 @@ export default function LckMatchBookingPage() {
               <CardContent>
                 <img src="/lol-park-seatmap.png" alt="LoL Park Seatmap" className="rounded-md w-full mb-6 border" />
                 <div className="space-y-3">
-                    <div className="flex justify-between items-center"><span className="font-semibold text-lg">응원석</span><span className="text-lg font-bold">70,000원</span></div>
-                    <div className="flex justify-between items-center"><span className="font-semibold text-lg">일반석</span><span className="text-lg font-bold">65,000원</span></div>
+                  <div className="flex justify-between items-center"><span className="font-semibold text-lg">응원석</span><span className="text-lg font-bold">70,000원</span></div>
+                  <div className="flex justify-between items-center"><span className="font-semibold text-lg">일반석</span><span className="text-lg font-bold">65,000원</span></div>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-end gap-4 mt-8">
-                    <Button variant="outline" onClick={handleAddToCart}>장바구니 담기</Button>
-                    <Button onClick={() => setIsSeatModalOpen(true)}>좌석 선택하기</Button>
+                  <Button variant="outline" onClick={handleAddToCart}>장바구니 담기</Button>
+                  <Button onClick={() => setIsSeatModalOpen(true)}>좌석 선택하기</Button>
                 </div>
               </CardContent>
             </Card>
@@ -202,7 +190,7 @@ export default function LckMatchBookingPage() {
         </div>
       </main>
 
-      {/* --- 좌석 선택 모달 (UI 수정) --- */}
+      {/* --- 좌석 선택 모달 --- */}
       {isSeatModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
           <div className="bg-background rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
@@ -212,7 +200,6 @@ export default function LckMatchBookingPage() {
             </div>
             <div className="p-6 flex-grow overflow-y-auto">
               <div className="w-full bg-foreground text-background text-center py-2 rounded-md mb-6 font-bold">STAGE</div>
-              {/* --- [수정] 등급별 색상 표시 --- */}
               <div className="grid grid-cols-10 gap-2">
                 {seats.map(seat => {
                   const isSelected = selectedSeats.some(s => s.id === seat.id);
@@ -228,20 +215,19 @@ export default function LckMatchBookingPage() {
                   )
                 })}
               </div>
-               {/* --- 등급 범례 추가 --- */}
               <div className="flex justify-center gap-4 mt-6 text-sm">
-                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-blue-300"></div>응원석</div>
-                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-gray-200"></div>일반석</div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-blue-300"></div>응원석</div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-gray-200"></div>일반석</div>
               </div>
             </div>
             <div className="p-4 border-t flex justify-between items-center">
-                <div>
-                    <p className="text-sm">총 금액</p>
-                    <p className="font-bold text-xl">{totalPrice.toLocaleString()}원</p>
-                </div>
-                <Button onClick={handleProceedToPayment} disabled={selectedSeats.length === 0}>
-                    다음 단계 ({selectedSeats.length}석)
-                </Button>
+              <div>
+                <p className="text-sm">총 금액</p>
+                <p className="font-bold text-xl">{totalPrice.toLocaleString()}원</p>
+              </div>
+              <Button onClick={handleProceedToPayment} disabled={selectedSeats.length === 0}>
+                다음 단계 ({selectedSeats.length}석)
+              </Button>
             </div>
           </div>
         </div>
